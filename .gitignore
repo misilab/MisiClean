@@ -1,0 +1,24 @@
+# Xcode
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Build outputs
+build/
+Release/
+*.pkg
+*.dmg
+*.zip
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# SPM
+.build/
+.swiftpm/
