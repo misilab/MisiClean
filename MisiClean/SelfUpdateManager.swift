@@ -144,11 +144,14 @@ final class SelfUpdateManager: ObservableObject {
             installState = .done
             try? await Task.sleep(nanoseconds: 600_000_000)
 
-            // 3. Relaunch new version
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            p.arguments = ["-n", Bundle.main.bundleURL.path]
-            try? p.run()
+            // 3. Relaunch — PKG: new binary is already in place, open immediately.
+            // DMG: the updater script handles copy + relaunch after quit; just terminate.
+            if isPkg {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                p.arguments = ["-n", Bundle.main.bundleURL.path]
+                try? p.run()
+            }
             NSApplication.shared.terminate(nil)
 
         } catch {
@@ -257,7 +260,7 @@ final class SelfUpdateManager: ObservableObject {
             rm -rf '\(dst)'
             cp -rf '\(src)' '\(dst)'
             /usr/bin/hdiutil detach '\(mountPath)' -quiet 2>/dev/null
-            open '\(dst)'
+            open -n '\(dst)'
             rm -f "$0"
             """
             let scriptPath = "/tmp/misclean_updater.sh"
