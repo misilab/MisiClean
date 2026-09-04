@@ -2894,7 +2894,19 @@
     "Informations matériel, logiciel et stockage" : {
 
     },
+    "Installation annulée" : {
+
+    },
+    "Installation en cours…" : {
+
+    },
+    "Installé — redémarrage…" : {
+
+    },
     "Installer" : {
+
+    },
+    "Installer MisiClean %@" : {
 
     },
     "Instantanés Time Machine locaux créés silencieusement par macOS" : {
@@ -4018,6 +4030,9 @@
         }
       }
     },
+    "Prête à être installée automatiquement" : {
+
+    },
     "Processus lancés silencieusement par macOS — %lld détecté%@" : {
       "localizations" : {
         "fr" : {
@@ -4771,10 +4786,7 @@
     "Taille min." : {
 
     },
-    "Télécharger" : {
-
-    },
-    "Télécharger MisiClean %@" : {
+    "Téléchargement %lld %%…" : {
 
     },
     "Terminé" : {
@@ -5031,9 +5043,6 @@
 
     },
     "Une notification s'affiche au maximum toutes les 4 heures." : {
-
-    },
-    "Une nouvelle version est prête à être téléchargée" : {
 
     },
     "Utilisation RAM" : {
