@@ -13,6 +13,7 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
     case uninstaller, iOSBackups, loginItems, browserExt, appUpdater, dormantApps
     case privacy, memory, maintenance, snapshots, launchAgents, appPermissions, battery, diskHealth, malwareScanner, networkMonitor
     case diskMap, diskExplorer, metadataCleaner, keychainAudit, sysInfo, history
+    case xcodeCleaner, topProcesses
     var id: Self { self }
 
     var label: LocalizedStringKey {
@@ -47,6 +48,8 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
         case .networkMonitor:   return "Réseau"
         case .metadataCleaner:  return "Métadonnées"
         case .keychainAudit:    return "Trousseau"
+        case .xcodeCleaner:     return "Xcode"
+        case .topProcesses:     return "Processus"
         }
     }
 
@@ -82,6 +85,8 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
         case .networkMonitor:   return "network"
         case .metadataCleaner:  return "location.slash.fill"
         case .keychainAudit:    return "key.fill"
+        case .xcodeCleaner:     return "hammer.fill"
+        case .topProcesses:     return "cpu"
         }
     }
 
@@ -117,17 +122,19 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
         case .networkMonitor:   return Color(red: 0.00, green: 0.55, blue: 0.90)
         case .metadataCleaner:  return Color(red: 0.88, green: 0.30, blue: 0.50)
         case .keychainAudit:    return Color(red: 0.35, green: 0.55, blue: 0.95)
+        case .xcodeCleaner:     return Color(red: 0.95, green: 0.55, blue: 0.1)
+        case .topProcesses:     return Color(red: 0.35, green: 0.6, blue: 0.85)
         }
     }
 }
 
 private let leftSidebarGroups: [(String, [AppSection])] = [
-    ("Nettoyage",    [.clean, .largeFiles, .oldFiles, .duplicates, .archives, .orphanPrefs, .devTools, .scheduledCleaning]),
+    ("Nettoyage",    [.clean, .largeFiles, .oldFiles, .duplicates, .archives, .orphanPrefs, .devTools, .xcodeCleaner, .scheduledCleaning]),
     ("Applications", [.uninstaller, .iOSBackups, .loginItems, .browserExt, .appUpdater, .dormantApps]),
 ]
 
 private let rightSidebarGroups: [(String, [AppSection])] = [
-    ("Système",      [.privacy, .memory, .maintenance, .snapshots, .launchAgents, .appPermissions, .battery, .diskHealth, .malwareScanner, .networkMonitor]),
+    ("Système",      [.privacy, .memory, .topProcesses, .maintenance, .snapshots, .launchAgents, .appPermissions, .battery, .diskHealth, .malwareScanner, .networkMonitor]),
     ("Outils",       [.diskMap, .diskExplorer, .metadataCleaner, .keychainAudit, .sysInfo, .history]),
 ]
 
@@ -392,6 +399,10 @@ struct ContentView: View {
                     MetadataCleanerSection(vm: metadataVM).transition(.opacity)
                 case .keychainAudit:
                     KeychainAuditSection(vm: keychainVM).transition(.opacity)
+                case .xcodeCleaner:
+                    XcodeCleanerSection().transition(.opacity)
+                case .topProcesses:
+                    TopProcessesSection().transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.18), value: section)
@@ -626,24 +637,44 @@ struct NettoyageSection: View {
 
 struct WelcomeView: View {
     @ObservedObject var vm: CleanerViewModel
+    @ObservedObject private var monitor = SystemMonitor.shared
     @State private var appeared = false
     @State private var strokeProgress: Double = 0
 
     private let g1 = Color(red: 0.15, green: 0.38, blue: 0.95)
     private let g2 = Color(red: 0.55, green: 0.15, blue: 0.90)
 
-    private var freePercent: Double { max(0, min(1, 1.0 - vm.diskInfo.usedFraction)) }
+    private var healthScore: Int {
+        var score = 100
+        score -= Int(vm.diskInfo.usedFraction * 30)
+        score -= Int(Double(monitor.ramPercent) / 100.0 * 20)
+        score -= monitor.cpuPercent > 80 ? 10 : monitor.cpuPercent > 50 ? 5 : 0
+        if SelfUpdateManager.shared.availableUpdate != nil { score -= 15 }
+        if let last = HistoryManager.shared.events.first {
+            let days = Calendar.current.dateComponents([.day], from: last.date, to: Date()).day ?? 0
+            if days > 30 { score -= 10 } else if days > 7 { score -= 5 }
+        } else {
+            score -= 10
+        }
+        return max(0, min(100, score))
+    }
 
     private var ringColor: LinearGradient {
-        if vm.diskInfo.usedFraction > 0.9 {
+        if healthScore < 50 {
             return LinearGradient(colors: [.red, Color(red: 0.9, green: 0.2, blue: 0.2)],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         }
-        if vm.diskInfo.usedFraction > 0.75 {
+        if healthScore < 70 {
             return LinearGradient(colors: [.orange, Color(red: 0.95, green: 0.6, blue: 0.0)],
                                   startPoint: .topLeading, endPoint: .bottomTrailing)
         }
         return LinearGradient(colors: [g1, g2], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private var ringShadowColor: Color {
+        if healthScore < 50 { return Color.red.opacity(0.45) }
+        if healthScore < 70 { return Color.orange.opacity(0.45) }
+        return g2.opacity(0.5)
     }
 
     private var healthBadge: some View {
@@ -657,18 +688,10 @@ struct WelcomeView: View {
     }
 
     private var healthStatus: (LocalizedStringKey, Color, String) {
-        if vm.diskInfo.usedFraction > 0.9 {
-            return ("Disque critique", .red, "exclamationmark.triangle.fill")
-        }
-        if vm.diskInfo.usedFraction > 0.75 {
-            return ("Espace limité", .orange, "exclamationmark.circle.fill")
-        }
-        if let last = HistoryManager.shared.events.first {
-            let days = Calendar.current.dateComponents([.day], from: last.date, to: Date()).day ?? 0
-            if days < 7 { return ("Mac en bonne santé", .green, "checkmark.circle.fill") }
-            if days > 30 { return ("Nettoyage recommandé", .orange, "arrow.triangle.2.circlepath") }
-        }
-        return ("Prêt à analyser", .blue, "magnifyingglass.circle.fill")
+        if healthScore >= 85 { return ("Excellent", Color(red: 0.15, green: 0.68, blue: 0.3), "checkmark.circle.fill") }
+        if healthScore >= 70 { return ("Bonne santé", .green, "checkmark.circle.fill") }
+        if healthScore >= 50 { return ("À améliorer", .orange, "exclamationmark.circle.fill") }
+        return ("Attention requise", .red, "exclamationmark.triangle.fill")
     }
 
     var body: some View {
@@ -686,19 +709,19 @@ struct WelcomeView: View {
                         .trim(from: 0, to: strokeProgress)
                         .stroke(ringColor, style: StrokeStyle(lineWidth: 16, lineCap: .round))
                         .rotationEffect(.degrees(-90))
-                        .shadow(color: g2.opacity(0.5), radius: 10, x: 0, y: 0)
+                        .shadow(color: ringShadowColor, radius: 10, x: 0, y: 0)
                     // Center content
                     VStack(spacing: 0) {
                         HStack(alignment: .lastTextBaseline, spacing: 2) {
-                            Text("\(Int(freePercent * 100))")
+                            Text("\(healthScore)")
                                 .font(.system(size: 56, weight: .bold, design: .rounded))
                                 .foregroundStyle(LinearGradient(colors: [g1, g2],
                                                                startPoint: .top, endPoint: .bottom))
-                            Text("%")
+                            Text("/ 100")
                                 .font(.title2.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
-                        Text("libre")
+                        Text("santé globale")
                             .font(.callout.weight(.medium))
                             .foregroundStyle(.secondary)
                     }
@@ -708,7 +731,12 @@ struct WelcomeView: View {
                 .opacity(appeared ? 1 : 0)
                 .onAppear {
                     withAnimation(.spring(response: 0.8, dampingFraction: 0.65).delay(0.15)) {
-                        strokeProgress = freePercent
+                        strokeProgress = Double(healthScore) / 100.0
+                    }
+                }
+                .onChange(of: healthScore) { newScore in
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        strokeProgress = Double(newScore) / 100.0
                     }
                 }
 
@@ -722,6 +750,24 @@ struct WelcomeView: View {
                 .opacity(appeared ? 1 : 0).offset(y: appeared ? 0 : 10)
 
                 healthBadge.opacity(appeared ? 1 : 0)
+
+                // Health factors row
+                HStack(spacing: 8) {
+                    HealthFactorCard(icon: "internaldrive", label: "Disque",
+                                     value: "\(Int((1 - vm.diskInfo.usedFraction) * 100))%",
+                                     ok: vm.diskInfo.usedFraction < 0.75)
+                    HealthFactorCard(icon: "memorychip", label: "RAM",
+                                     value: "\(100 - monitor.ramPercent)%",
+                                     ok: monitor.ramPercent < 75)
+                    HealthFactorCard(icon: "cpu", label: "CPU",
+                                     value: "\(monitor.cpuPercent)%",
+                                     ok: monitor.cpuPercent < 50)
+                    HealthFactorCard(icon: "arrow.up.circle", label: "Màj",
+                                     value: SelfUpdateManager.shared.availableUpdate == nil ? "OK" : "!",
+                                     ok: SelfUpdateManager.shared.availableUpdate == nil)
+                }
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 8)
 
                 // CTA button
                 Button { Task { await vm.scan() } } label: {
@@ -774,6 +820,36 @@ struct WelcomeView: View {
             appeared = false
             strokeProgress = 0
         }
+    }
+}
+
+private struct HealthFactorCard: View {
+    let icon: String
+    let label: String
+    let value: String
+    let ok: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(ok ? Color(red: 0.15, green: 0.68, blue: 0.3) : .orange)
+            Text(value)
+                .font(.caption.monospacedDigit().weight(.bold))
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: 58)
+        .padding(.vertical, 8)
+        .background(
+            ok ? Color.green.opacity(0.07) : Color.orange.opacity(0.07),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(ok ? Color.green.opacity(0.2) : Color.orange.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 

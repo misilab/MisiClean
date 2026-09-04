@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import AppKit
 import Combine
 import UniformTypeIdentifiers
 
@@ -39,6 +40,11 @@ struct HistorySection: View {
             if !hm.events.isEmpty {
                 Button { exportHistory() } label: {
                     Label("Exporter", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.bordered)
+
+                Button { exportAsPDF() } label: {
+                    Label("PDF", systemImage: "doc.richtext")
                 }
                 .buttonStyle(.bordered)
 
@@ -86,6 +92,26 @@ struct HistorySection: View {
         panel.allowedContentTypes = [.plainText]
         if panel.runModal() == .OK, let url = panel.url {
             try? content.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func exportAsPDF() {
+        let estimatedHeight = CGFloat(200 + min(hm.events.count, 100) * 34)
+        let frame = CGRect(x: 0, y: 0, width: 595, height: max(estimatedHeight, 500))
+        let host = NSHostingView(rootView: HistoryPDFContent(
+            events: hm.events,
+            totalFreed: hm.totalFreedBytes,
+            cleanCount: hm.cleanCount
+        ))
+        host.frame = frame
+
+        let panel = NSSavePanel()
+        panel.title = "Exporter le rapport PDF"
+        panel.nameFieldStringValue = "MisiClean-rapport.pdf"
+        panel.allowedContentTypes = [.pdf]
+        if panel.runModal() == .OK, let url = panel.url {
+            let data = host.dataWithPDF(inside: frame)
+            try? data.write(to: url)
         }
     }
 
@@ -184,5 +210,105 @@ struct HistoryEventRow: View {
         if event.freedBytes > 1_000_000_000 { return .red }
         if event.freedBytes > 200_000_000   { return .orange }
         return .green
+    }
+}
+
+// MARK: - PDF Report Content
+
+private struct HistoryPDFContent: View {
+    let events: [CleanupEvent]
+    let totalFreed: Int64
+    let cleanCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("MisiClean")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.black)
+                    Text("Rapport de nettoyage")
+                        .font(.title3)
+                        .foregroundStyle(Color.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(Date().formatted(date: .long, time: .omitted))
+                        .font(.callout).foregroundStyle(Color.black)
+                    Text(Date().formatted(date: .omitted, time: .shortened))
+                        .font(.caption).foregroundStyle(Color.secondary)
+                }
+            }
+            .padding(.bottom, 20)
+
+            Rectangle().fill(Color.secondary.opacity(0.25)).frame(height: 1)
+
+            // Summary stats
+            HStack(spacing: 0) {
+                pdfStatBox(value: totalFreed.formattedSize, label: "Espace libéré")
+                Rectangle().fill(Color.secondary.opacity(0.2)).frame(width: 1, height: 44)
+                pdfStatBox(value: "\(cleanCount)", label: "Nettoyage\(cleanCount > 1 ? "s" : "")")
+                Rectangle().fill(Color.secondary.opacity(0.2)).frame(width: 1, height: 44)
+                pdfStatBox(value: "\(events.count)", label: "Événements")
+            }
+            .padding(.vertical, 16)
+
+            Rectangle().fill(Color.secondary.opacity(0.25)).frame(height: 1)
+
+            // Event table
+            Text("Historique détaillé")
+                .font(.headline).foregroundStyle(Color.black)
+                .padding(.top, 16).padding(.bottom, 10)
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("Date").font(.caption.weight(.semibold)).foregroundStyle(Color.secondary)
+                        .frame(width: 140, alignment: .leading)
+                    Text("Catégories").font(.caption.weight(.semibold)).foregroundStyle(Color.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Libéré").font(.caption.weight(.semibold)).foregroundStyle(Color.secondary)
+                        .frame(width: 80, alignment: .trailing)
+                }
+                .padding(.vertical, 6).padding(.horizontal, 8)
+                .background(Color.secondary.opacity(0.1))
+
+                ForEach(Array(events.prefix(100).enumerated()), id: \.element.id) { idx, event in
+                    HStack {
+                        Text(event.date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption.monospacedDigit()).foregroundStyle(Color.secondary)
+                            .frame(width: 140, alignment: .leading)
+                        Text(event.categoryNames.isEmpty ? "—" : event.categoryNames.joined(separator: ", "))
+                            .font(.caption).lineLimit(1).foregroundStyle(Color.black)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(event.freedBytes.formattedSize)
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(Color.blue)
+                            .frame(width: 80, alignment: .trailing)
+                    }
+                    .padding(.vertical, 5).padding(.horizontal, 8)
+                    .background(idx.isMultiple(of: 2) ? Color.secondary.opacity(0.04) : Color.clear)
+                }
+            }
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.2), lineWidth: 1))
+
+            Spacer(minLength: 40)
+
+            // Footer
+            Text("Généré par MisiClean · \(Date().formatted(date: .long, time: .shortened))")
+                .font(.system(size: 9)).foregroundStyle(Color.secondary)
+        }
+        .padding(40)
+        .background(Color.white)
+        .frame(width: 595)
+    }
+
+    private func pdfStatBox(value: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value).font(.title2.bold()).foregroundStyle(Color.black)
+            Text(label).font(.caption).foregroundStyle(Color.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 }
