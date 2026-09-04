@@ -14,6 +14,7 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
     case privacy, memory, maintenance, snapshots, launchAgents, appPermissions, battery, diskHealth, malwareScanner, networkMonitor
     case diskMap, diskExplorer, metadataCleaner, keychainAudit, sysInfo, history
     case xcodeCleaner, topProcesses
+    case mailAttachments, crashReports, sandboxOrphans, sleepImage
     var id: Self { self }
 
     var label: LocalizedStringKey {
@@ -50,6 +51,10 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
         case .keychainAudit:    return "Trousseau"
         case .xcodeCleaner:     return "Xcode"
         case .topProcesses:     return "Processus"
+        case .mailAttachments:  return "Pièces jointes"
+        case .crashReports:     return "Crash reports"
+        case .sandboxOrphans:   return "Sandbox"
+        case .sleepImage:       return "Mémoire virt."
         }
     }
 
@@ -87,6 +92,10 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
         case .keychainAudit:    return "key.fill"
         case .xcodeCleaner:     return "hammer.fill"
         case .topProcesses:     return "cpu"
+        case .mailAttachments:  return "paperclip"
+        case .crashReports:     return "ladybug.fill"
+        case .sandboxOrphans:   return "shippingbox.fill"
+        case .sleepImage:       return "moon.fill"
         }
     }
 
@@ -124,17 +133,21 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
         case .keychainAudit:    return Color(red: 0.35, green: 0.55, blue: 0.95)
         case .xcodeCleaner:     return Color(red: 0.95, green: 0.55, blue: 0.1)
         case .topProcesses:     return Color(red: 0.35, green: 0.6, blue: 0.85)
+        case .mailAttachments:  return Color(red: 0.1,  green: 0.55, blue: 0.9)
+        case .crashReports:     return Color(red: 0.88, green: 0.35, blue: 0.15)
+        case .sandboxOrphans:   return Color(red: 0.5,  green: 0.35, blue: 0.85)
+        case .sleepImage:       return Color(red: 0.3,  green: 0.45, blue: 0.85)
         }
     }
 }
 
 private let leftSidebarGroups: [(String, [AppSection])] = [
-    ("Nettoyage",    [.clean, .largeFiles, .oldFiles, .duplicates, .archives, .orphanPrefs, .devTools, .xcodeCleaner, .scheduledCleaning]),
-    ("Applications", [.uninstaller, .iOSBackups, .loginItems, .browserExt, .appUpdater, .dormantApps]),
+    ("Nettoyage",    [.clean, .largeFiles, .oldFiles, .duplicates, .archives, .orphanPrefs, .devTools, .xcodeCleaner, .scheduledCleaning, .mailAttachments, .crashReports]),
+    ("Applications", [.uninstaller, .iOSBackups, .loginItems, .browserExt, .appUpdater, .dormantApps, .sandboxOrphans]),
 ]
 
 private let rightSidebarGroups: [(String, [AppSection])] = [
-    ("Système",      [.privacy, .memory, .topProcesses, .maintenance, .snapshots, .launchAgents, .appPermissions, .battery, .diskHealth, .malwareScanner, .networkMonitor]),
+    ("Système",      [.privacy, .memory, .topProcesses, .maintenance, .snapshots, .launchAgents, .appPermissions, .battery, .diskHealth, .malwareScanner, .networkMonitor, .sleepImage]),
     ("Outils",       [.diskMap, .diskExplorer, .metadataCleaner, .keychainAudit, .sysInfo, .history]),
 ]
 
@@ -170,7 +183,11 @@ struct ContentView: View {
     @StateObject private var orphanPrefsVM    = OrphanPrefsViewModel()
     @StateObject private var networkMonitorVM = NetworkMonitorViewModel()
     @StateObject private var metadataVM       = MetadataCleanerViewModel()
-    @StateObject private var keychainVM       = KeychainAuditViewModel()
+    @StateObject private var keychainVM         = KeychainAuditViewModel()
+    @StateObject private var mailAttachmentsVM  = MailAttachmentsViewModel()
+    @StateObject private var crashReportsVM     = CrashReportsViewModel()
+    @StateObject private var sandboxOrphansVM   = SandboxOrphansViewModel()
+    @StateObject private var sleepImageVM       = SleepImageViewModel()
     @ObservedObject private var updateManager = SelfUpdateManager.shared
     @State private var hasFDA: Bool = ContentView.checkFDA()
     @State private var diskInfo: DiskInfo = .load()
@@ -403,6 +420,14 @@ struct ContentView: View {
                     XcodeCleanerSection().transition(.opacity)
                 case .topProcesses:
                     TopProcessesSection().transition(.opacity)
+                case .mailAttachments:
+                    MailAttachmentsSection(vm: mailAttachmentsVM).transition(.opacity)
+                case .crashReports:
+                    CrashReportsSection(vm: crashReportsVM).transition(.opacity)
+                case .sandboxOrphans:
+                    SandboxOrphansSection(vm: sandboxOrphansVM).transition(.opacity)
+                case .sleepImage:
+                    SleepImageSection(vm: sleepImageVM).transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.18), value: section)

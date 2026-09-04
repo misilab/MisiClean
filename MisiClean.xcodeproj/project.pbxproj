@@ -6,35 +6,8 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		D895AAD530493FAF00298F72 /* DevToolsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D895AAD430493FAF00298F72 /* DevToolsView.swift */; };
-		D895AAD730493FD600298F72 /* SnapshotsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D895AAD630493FD600298F72 /* SnapshotsView.swift */; };
-		D895AAD93049400700298F72 /* BrowserExtensionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D895AAD83049400700298F72 /* BrowserExtensionsView.swift */; };
-		D8D2EF053048BF7200D45A1B /* OldFilesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8D2EF043048BF7200D45A1B /* OldFilesView.swift */; };
-		D8D2EF073048BFA000D45A1B /* SystemInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8D2EF063048BFA000D45A1B /* SystemInfoView.swift */; };
-		D8F115263049C93D00E267DE /* IOSBackupsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F115253049C93D00E267DE /* IOSBackupsView.swift */; };
-		D8F115283049C96A00E267DE /* LaunchAgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F115273049C96A00E267DE /* LaunchAgentsView.swift */; };
-		D8F1152A3049C99700E267DE /* DiskMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F115293049C99700E267DE /* DiskMapView.swift */; };
-		D8F1152C3049E10100E267DE /* BatteryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F1152B3049E10100E267DE /* BatteryView.swift */; };
-		D8F1152E3049E15500E267DE /* AppUpdaterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F1152D3049E15500E267DE /* AppUpdaterView.swift */; };
-		D8F115303049E18000E267DE /* ScheduledCleaningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F1152F3049E18000E267DE /* ScheduledCleaningView.swift */; };
-		D8F115323049EAC000E267DE /* MalwareScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F115313049EAC000E267DE /* MalwareScannerView.swift */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXFileReference section */
-		D895AAD430493FAF00298F72 /* DevToolsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevToolsView.swift; sourceTree = "<group>"; };
-		D895AAD630493FD600298F72 /* SnapshotsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotsView.swift; sourceTree = "<group>"; };
-		D895AAD83049400700298F72 /* BrowserExtensionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserExtensionsView.swift; sourceTree = "<group>"; };
 		D8D27935304816AC00C614AE /* MisiClean.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MisiClean.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		D8D2EF043048BF7200D45A1B /* OldFilesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OldFilesView.swift; sourceTree = "<group>"; };
-		D8D2EF063048BFA000D45A1B /* SystemInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemInfoView.swift; sourceTree = "<group>"; };
-		D8F115253049C93D00E267DE /* IOSBackupsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSBackupsView.swift; sourceTree = "<group>"; };
-		D8F115273049C96A00E267DE /* LaunchAgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAgentsView.swift; sourceTree = "<group>"; };
-		D8F115293049C99700E267DE /* DiskMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskMapView.swift; sourceTree = "<group>"; };
-		D8F1152B3049E10100E267DE /* BatteryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryView.swift; sourceTree = "<group>"; };
-		D8F1152D3049E15500E267DE /* AppUpdaterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdaterView.swift; sourceTree = "<group>"; };
-		D8F1152F3049E18000E267DE /* ScheduledCleaningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledCleaningView.swift; sourceTree = "<group>"; };
-		D8F115313049EAC000E267DE /* MalwareScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MalwareScannerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -61,18 +34,6 @@
 			children = (
 				D8D27937304816AC00C614AE /* MisiClean */,
 				D8D27936304816AC00C614AE /* Products */,
-				D8D2EF043048BF7200D45A1B /* OldFilesView.swift */,
-				D8D2EF063048BFA000D45A1B /* SystemInfoView.swift */,
-				D895AAD430493FAF00298F72 /* DevToolsView.swift */,
-				D895AAD630493FD600298F72 /* SnapshotsView.swift */,
-				D895AAD83049400700298F72 /* BrowserExtensionsView.swift */,
-				D8F115253049C93D00E267DE /* IOSBackupsView.swift */,
-				D8F115273049C96A00E267DE /* LaunchAgentsView.swift */,
-				D8F115293049C99700E267DE /* DiskMapView.swift */,
-				D8F1152B3049E10100E267DE /* BatteryView.swift */,
-				D8F1152D3049E15500E267DE /* AppUpdaterView.swift */,
-				D8F1152F3049E18000E267DE /* ScheduledCleaningView.swift */,
-				D8F115313049EAC000E267DE /* MalwareScannerView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -162,18 +123,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D895AAD530493FAF00298F72 /* DevToolsView.swift in Sources */,
-				D8D2EF073048BFA000D45A1B /* SystemInfoView.swift in Sources */,
-				D8F115303049E18000E267DE /* ScheduledCleaningView.swift in Sources */,
-				D8F1152A3049C99700E267DE /* DiskMapView.swift in Sources */,
-				D8F115283049C96A00E267DE /* LaunchAgentsView.swift in Sources */,
-				D8F115323049EAC000E267DE /* MalwareScannerView.swift in Sources */,
-				D8F1152E3049E15500E267DE /* AppUpdaterView.swift in Sources */,
-				D8F1152C3049E10100E267DE /* BatteryView.swift in Sources */,
-				D8D2EF053048BF7200D45A1B /* OldFilesView.swift in Sources */,
-				D8F115263049C93D00E267DE /* IOSBackupsView.swift in Sources */,
-				D895AAD730493FD600298F72 /* SnapshotsView.swift in Sources */,
-				D895AAD93049400700298F72 /* BrowserExtensionsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,7 +256,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = SM6L2XLUBA;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -319,7 +268,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.1;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = fr.misilab.MisiClean;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -339,7 +288,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = SM6L2XLUBA;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -351,7 +300,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.1;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = fr.misilab.MisiClean;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
