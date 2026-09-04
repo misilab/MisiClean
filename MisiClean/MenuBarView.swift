@@ -9,27 +9,91 @@ import AppKit
 // MARK: - Menu Bar Label
 
 struct MenuBarStatusLabel: View {
-    let diskInfo: DiskInfo
+    @ObservedObject var monitor: SystemMonitor
 
-    private var freeText: String {
-        let gb = Double(diskInfo.availableBytes) / 1_000_000_000
-        if gb >= 1 { return String(format: "%.0f Go", gb) }
-        let mb = Double(diskInfo.availableBytes) / 1_000_000
-        return String(format: "%.0f Mo", mb)
+    private var diskColor: Color {
+        monitor.diskInfo.usedFraction > 0.9 ? .red
+            : monitor.diskInfo.usedFraction > 0.75 ? .orange : .primary
     }
 
-    private var statusColor: Color {
-        diskInfo.usedFraction > 0.9 ? .red : diskInfo.usedFraction > 0.75 ? .orange : .primary
+    private var cpuColor: Color {
+        monitor.cpuPercent > 90 ? .red : monitor.cpuPercent > 70 ? .orange : .primary
     }
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: diskInfo.usedFraction > 0.9 ? "internaldrive.fill" : "internaldrive")
-            Text(freeText)
-                .font(.caption.monospacedDigit().weight(.medium))
+        HStack(spacing: 6) {
+            // CPU
+            HStack(spacing: 2) {
+                Image(systemName: "cpu").imageScale(.small)
+                Text("\(monitor.cpuPercent)%")
+                    .font(.caption.monospacedDigit().weight(.medium))
+            }
+            .foregroundStyle(cpuColor)
+
+            // Network
+            if monitor.netUpBps > 0 || monitor.netDownBps > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "network").imageScale(.small)
+                    VStack(alignment: .leading, spacing: -1) {
+                        HStack(spacing: 1) {
+                            Image(systemName: "arrow.up").imageScale(.small)
+                            Text(monitor.netUpBps.bpsFormatted)
+                        }
+                        HStack(spacing: 1) {
+                            Image(systemName: "arrow.down").imageScale(.small)
+                            Text(monitor.netDownBps.bpsFormatted)
+                        }
+                    }
+                    .font(.system(size: 8).monospacedDigit())
+                }
+                .foregroundStyle(.primary)
+            }
+
+            // Disk free
+            HStack(spacing: 2) {
+                Image(systemName: monitor.diskInfo.usedFraction > 0.9 ? "internaldrive.fill" : "internaldrive")
+                    .imageScale(.small)
+                Text(monitor.diskInfo.availableBytes.formattedSize)
+                    .font(.caption.monospacedDigit().weight(.medium))
+            }
+            .foregroundStyle(diskColor)
         }
-        .foregroundStyle(statusColor)
     }
+}
+
+// MARK: - Quick Scan State
+
+private enum QuickScanState {
+    case idle, scanning, clean, threats(Int)
+
+    var icon: String {
+        switch self {
+        case .idle:     return "shield"
+        case .scanning: return "shield"
+        case .clean:    return "checkmark.shield.fill"
+        case .threats:  return "exclamationmark.shield.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .idle:     return .secondary
+        case .scanning: return .secondary
+        case .clean:    return .green
+        case .threats:  return .red
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .idle:           return "Vérification rapide des agents suspects"
+        case .scanning:       return "Analyse en cours…"
+        case .clean:          return "Aucune menace détectée"
+        case .threats(let n): return "\(n) élément\(n > 1 ? "s" : "") suspect\(n > 1 ? "s" : "") trouvé\(n > 1 ? "s" : "")"
+        }
+    }
+
+    var isScanning: Bool { if case .scanning = self { return true }; return false }
 }
 
 // MARK: - Menu Bar Panel
@@ -38,23 +102,37 @@ struct MenuBarPanel: View {
     @Environment(\.openWindow) private var openWindow
     @State private var diskInfo = DiskInfo.load()
     @ObservedObject private var hm = HistoryManager.shared
-    @State private var isHoveringOpen = false
-    @State private var isHoveringQuit = false
+    @ObservedObject private var updateManager = SelfUpdateManager.shared
+    @State private var scanState: QuickScanState = .idle
+    @State private var ramUsed: Int64 = 0
+    @State private var ramTotal: Int64 = 0
+    @State private var isHoveringClean = false
+    @State private var isHoveringOpen  = false
+    @State private var isHoveringQuit  = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            diskSection
+            statsSection
             Divider()
+            scanSection
             if !hm.events.isEmpty {
-                historySnippet
                 Divider()
+                historySnippet
             }
+            if updateManager.availableUpdate != nil {
+                Divider()
+                updateSection
+            }
+            Divider()
             actions
         }
         .frame(width: 300)
-        .onAppear { diskInfo = DiskInfo.load() }
+        .onAppear {
+            diskInfo = DiskInfo.load()
+            loadRAM()
+        }
     }
 
     // MARK: Header
@@ -68,44 +146,95 @@ struct MenuBarPanel: View {
                 Text("Nettoyeur Mac").font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
-            // Disk status indicator dot
-            Circle()
-                .fill(diskStatusColor)
-                .frame(width: 8, height: 8)
-                .help(diskStatusLabel)
+            if updateManager.availableUpdate != nil {
+                Circle().fill(Color.orange).frame(width: 8, height: 8)
+                    .help("Mise à jour disponible")
+            } else {
+                Circle().fill(diskStatusColor).frame(width: 8, height: 8)
+                    .help(diskStatusLabel)
+            }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
     }
 
-    // MARK: Disk usage
+    // MARK: Stats (Disk + RAM)
 
-    private var diskSection: some View {
-        VStack(spacing: 8) {
+    private var statsSection: some View {
+        VStack(spacing: 10) {
+            statRow(
+                icon: "internaldrive",
+                label: "Disque",
+                free: diskInfo.availableBytes.formattedSize,
+                used: diskInfo.usedBytes.formattedSize,
+                total: diskInfo.totalBytes.formattedSize,
+                fraction: diskInfo.usedFraction,
+                color: diskStatusColor
+            )
+            if ramTotal > 0 {
+                let frac = min(Double(ramUsed) / Double(ramTotal), 1)
+                let color: Color = frac > 0.9 ? .red : frac > 0.75 ? .orange : .blue
+                statRow(
+                    icon: "memorychip",
+                    label: "Mémoire",
+                    free: (ramTotal - ramUsed).formattedSize,
+                    used: ramUsed.formattedSize,
+                    total: ramTotal.formattedSize,
+                    fraction: frac,
+                    color: color
+                )
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+
+    private func statRow(icon: String, label: String, free: String, used: String, total: String, fraction: Double, color: Color) -> some View {
+        VStack(spacing: 5) {
             HStack {
-                Label("Disque", systemImage: "internaldrive").font(.callout)
+                Label(label, systemImage: icon).font(.caption)
                 Spacer()
-                Text("\(diskInfo.availableBytes.formattedSize) libres")
-                    .font(.caption.monospacedDigit()).foregroundStyle(diskStatusColor)
+                Text("\(free) libres").font(.caption.monospacedDigit()).foregroundStyle(color)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.secondary.opacity(0.1))
                     Capsule()
-                        .fill(LinearGradient(colors: [diskStatusColor, diskStatusColor.opacity(0.6)],
-                                            startPoint: .leading, endPoint: .trailing))
-                        .frame(width: max(4, geo.size.width * CGFloat(diskInfo.usedFraction)))
+                        .fill(LinearGradient(colors: [color, color.opacity(0.6)], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(4, geo.size.width * CGFloat(fraction)))
                 }
             }
-            .frame(height: 6)
+            .frame(height: 5)
             HStack {
-                Text("\(diskInfo.usedBytes.formattedSize) / \(diskInfo.totalBytes.formattedSize)")
-                    .font(.caption2).foregroundStyle(.secondary)
+                Text("\(used) / \(total)").font(.caption2).foregroundStyle(.secondary)
                 Spacer()
-                Text("\(Int(diskInfo.usedFraction * 100))% utilisé")
-                    .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                Text("\(Int(fraction * 100))%").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+
+    // MARK: Quick Antivirus Scan
+
+    private var scanSection: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle().fill(scanState.color.opacity(0.12)).frame(width: 34, height: 34)
+                if scanState.isScanning {
+                    ProgressView().scaleEffect(0.65)
+                } else {
+                    Image(systemName: scanState.icon)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(scanState.color)
+                }
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Scan antivirus rapide").font(.caption.weight(.semibold))
+                Text(scanState.subtitle).font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(scanState.isScanning ? "…" : "Scanner") { runQuickScan() }
+                .buttonStyle(.bordered).controlSize(.mini)
+                .disabled(scanState.isScanning)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9)
     }
 
     // MARK: Last cleanup snippet
@@ -121,8 +250,25 @@ struct MenuBarPanel: View {
                 }
             }
             Spacer()
-            Text("Total: \(hm.totalFreedBytes.formattedSize)")
-                .font(.caption2).foregroundStyle(.tertiary)
+            Text("Total: \(hm.totalFreedBytes.formattedSize)").font(.caption2).foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+    }
+
+    // MARK: Update notification
+
+    private var updateSection: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.up.circle.fill")
+                .font(.system(size: 22)).foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("v\(updateManager.availableUpdate?.version ?? "") disponible")
+                    .font(.caption.weight(.semibold))
+                Text("Nouvelle version prête").font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Installer") { updateManager.openDownloadPage() }
+                .buttonStyle(.borderedProminent).tint(.orange).controlSize(.mini)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
     }
@@ -131,7 +277,13 @@ struct MenuBarPanel: View {
 
     private var actions: some View {
         VStack(spacing: 2) {
-            menuButton(label: "Ouvrir MisiClean", icon: "sparkles", isHovering: isHoveringOpen) {
+            menuButton(label: "Nettoyage rapide", icon: "sparkles", isHovering: isHoveringClean) {
+                openWindow(id: "main")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            .onHover { isHoveringClean = $0 }
+
+            menuButton(label: "Ouvrir MisiClean", icon: "macwindow", isHovering: isHoveringOpen) {
                 openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
             }
@@ -155,8 +307,82 @@ struct MenuBarPanel: View {
                             in: RoundedRectangle(cornerRadius: 6))
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 6)
+        .buttonStyle(.plain).padding(.horizontal, 6)
+    }
+
+    // MARK: Quick scan
+
+    private func runQuickScan() {
+        scanState = .scanning
+        Task.detached(priority: .userInitiated) {
+            let count = MenuBarPanel.quickScan()
+            await MainActor.run {
+                withAnimation { self.scanState = count == 0 ? .clean : .threats(count) }
+            }
+        }
+    }
+
+    nonisolated private static func quickScan() -> Int {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser
+        let keywords = ["miner", "cryptominer", "adware", "spyware", "hijack", "payload",
+                        "backdoor", "trojan", "rootkit", "keylogger", "ransom"]
+        let paths = [
+            home.appendingPathComponent("Library/LaunchAgents").path,
+            "/Library/LaunchAgents",
+            "/Library/LaunchDaemons",
+        ]
+        var found = 0
+        for path in paths {
+            guard let items = try? fm.contentsOfDirectory(atPath: path) else { continue }
+            for item in items {
+                let lower = item.lowercased()
+                if keywords.contains(where: { lower.contains($0) }) { found += 1; continue }
+                // Also scan plist content for suspicious program paths
+                let full = (path as NSString).appendingPathComponent(item)
+                if let dict = NSDictionary(contentsOfFile: full) as? [String: Any] {
+                    let content = "\(dict)".lowercased()
+                    if keywords.contains(where: { content.contains($0) }) { found += 1 }
+                }
+            }
+        }
+        return found
+    }
+
+    // MARK: RAM
+
+    private func loadRAM() {
+        ramTotal = Int64(ProcessInfo.processInfo.physicalMemory)
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/vm_stat")
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = Pipe()
+        guard (try? proc.run()) != nil else { return }
+        proc.waitUntilExit()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+        var pageSize: Int64 = 16384
+        var active: Int64 = 0; var wire: Int64 = 0; var compressed: Int64 = 0
+        for line in output.split(separator: "\n") {
+            let s = String(line)
+            if s.contains("page size of") {
+                pageSize = s.components(separatedBy: " ").compactMap { Int64($0) }.last ?? 16384
+            } else if s.contains("Pages active") {
+                active = parse(s)
+            } else if s.contains("Pages wired") {
+                wire = parse(s)
+            } else if s.contains("Pages occupied by compressor") {
+                compressed = parse(s)
+            }
+        }
+        ramUsed = min((active + wire + compressed) * pageSize, ramTotal)
+    }
+
+    private func parse(_ line: String) -> Int64 {
+        Int64(line.components(separatedBy: ":").last?
+            .trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: ".", with: "") ?? "") ?? 0
     }
 
     // MARK: Helpers

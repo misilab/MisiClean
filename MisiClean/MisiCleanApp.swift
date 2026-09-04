@@ -10,7 +10,7 @@ import UserNotifications
 
 @main
 struct MisiCleanApp: App {
-    @State private var diskInfo = DiskInfo.load()
+    @ObservedObject private var sysMonitor = SystemMonitor.shared
     // Tracks whether we have already handled the startup window policy this process run
     private static var didHandleStartup = false
 
@@ -49,7 +49,7 @@ struct MisiCleanApp: App {
         MenuBarExtra {
             MenuBarPanel()
         } label: {
-            MenuBarStatusLabel(diskInfo: diskInfo)
+            MenuBarStatusLabel(monitor: sysMonitor)
         }
         .menuBarExtraStyle(.window)
     }
