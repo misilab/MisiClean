@@ -163,31 +163,38 @@ final class SelfUpdateManager: ObservableObject {
 
     // MARK: - Private helpers
 
+    // URLSessionDownloadTask + delegate — télécharge en arrière-plan, zéro overhead MainActor
     private func downloadFile(from url: URL, to path: String) async throws {
-        let destURL = URL(fileURLWithPath: path)
-        let (asyncBytes, response) = try await URLSession.shared.bytes(from: url)
-        let total = response.expectedContentLength
-
-        try? FileManager.default.removeItem(at: destURL)
-        FileManager.default.createFile(atPath: path, contents: nil)
-        let fh = try FileHandle(forWritingTo: destURL)
-
-        var received: Int64 = 0
-        var chunk = Data(capacity: 131_072)
-
-        for try await byte in asyncBytes {
-            chunk.append(byte)
-            received += 1
-            if chunk.count >= 131_072 {
-                try fh.write(contentsOf: chunk)
-                chunk.removeAll(keepingCapacity: true)
-                if total > 0 {
-                    installState = .downloading(progress: Double(received) / Double(total))
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let delegate = DownloadProgressDelegate(
+                onProgress: { [weak self] progress in
+                    Task { @MainActor [weak self] in
+                        self?.installState = .downloading(progress: progress)
+                    }
+                },
+                onComplete: { tmpURL, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    guard let tmpURL else {
+                        continuation.resume(throwing: URLError(.unknown))
+                        return
+                    }
+                    do {
+                        let dest = URL(fileURLWithPath: path)
+                        try? FileManager.default.removeItem(at: dest)
+                        try FileManager.default.moveItem(at: tmpURL, to: dest)
+                        continuation.resume()
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
-            }
+            )
+            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+            delegate.session = session          // retain session until download ends
+            session.downloadTask(with: url).resume()
         }
-        if !chunk.isEmpty { try fh.write(contentsOf: chunk) }
-        try fh.close()
     }
 
     // Runs `installer -pkg ... -target /` via AppleScript (shows macOS auth dialog once)
@@ -275,5 +282,47 @@ final class SelfUpdateManager: ObservableObject {
 
     private func isNewerVersion(_ remote: String, than local: String) -> Bool {
         remote.compare(local, options: .numeric) == .orderedDescending
+    }
+}
+
+// MARK: - URLSession download delegate (background, with progress)
+
+private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
+    let onProgress: (Double) -> Void
+    let onComplete: (URL?, Error?) -> Void
+    // Retain the session so it lives until the download ends
+    var session: URLSession?
+    private var didComplete = false
+
+    init(onProgress: @escaping (Double) -> Void,
+         onComplete: @escaping (URL?, Error?) -> Void) {
+        self.onProgress = onProgress
+        self.onComplete = onComplete
+    }
+
+    func urlSession(_ session: URLSession,
+                    downloadTask: URLSessionDownloadTask,
+                    didFinishDownloadingTo location: URL) {
+        didComplete = true
+        onComplete(location, nil)
+        self.session = nil
+    }
+
+    func urlSession(_ session: URLSession,
+                    task: URLSessionTask,
+                    didCompleteWithError error: Error?) {
+        if !didComplete {
+            onComplete(nil, error ?? URLError(.unknown))
+            self.session = nil
+        }
+    }
+
+    func urlSession(_ session: URLSession,
+                    downloadTask: URLSessionDownloadTask,
+                    didWriteData bytesWritten: Int64,
+                    totalBytesWritten: Int64,
+                    totalBytesExpectedToWrite: Int64) {
+        guard totalBytesExpectedToWrite > 0 else { return }
+        onProgress(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
     }
 }
