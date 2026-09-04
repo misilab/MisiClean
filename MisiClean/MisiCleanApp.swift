@@ -55,11 +55,22 @@ struct MisiCleanApp: App {
     }
 
     private func startUpdateCheck() {
-        Task { @MainActor in
-            guard PreferencesManager.shared.autoCheckUpdates,
-                  SelfUpdateManager.shared.shouldAutoCheck else { return }
-            await SelfUpdateManager.shared.checkForUpdates()
+        Task.detached(priority: .background) {
+            // Vérification au lancement
+            await MisiCleanApp.runUpdateCheckIfNeeded()
+            // Puis toutes les 12h pendant que l'app tourne
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(43_200))
+                await MisiCleanApp.runUpdateCheckIfNeeded()
+            }
         }
+    }
+
+    @MainActor
+    private static func runUpdateCheckIfNeeded() async {
+        guard PreferencesManager.shared.autoCheckUpdates,
+              SelfUpdateManager.shared.shouldAutoCheck else { return }
+        await SelfUpdateManager.shared.checkForUpdates()
     }
 
     // Vérifie l'espace disque toutes les 5 minutes et notifie si critique (>90%)
