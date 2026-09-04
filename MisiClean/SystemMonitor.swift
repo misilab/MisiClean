@@ -12,10 +12,16 @@ import Darwin
 final class SystemMonitor: ObservableObject {
     static let shared = SystemMonitor()
 
-    @Published var cpuPercent: Int    = 0
-    @Published var netUpBps:   Int64  = 0
-    @Published var netDownBps: Int64  = 0
-    @Published var diskInfo: DiskInfo = .load()
+    @Published var cpuPercent:   Int   = 0
+    @Published var netUpBps:     Int64 = 0
+    @Published var netDownBps:   Int64 = 0
+    @Published var diskInfo:   DiskInfo = .load()
+    @Published var ramUsedBytes: Int64 = 0
+    @Published var ramTotalBytes: Int64 = Int64(ProcessInfo.processInfo.physicalMemory)
+
+    var ramPercent: Int {
+        ramTotalBytes > 0 ? max(0, min(100, Int(Double(ramUsedBytes) / Double(ramTotalBytes) * 100))) : 0
+    }
 
     private var prevTicks:    [Int32]  = []
     private var prevBytesIn:  UInt64   = 0
@@ -33,12 +39,15 @@ final class SystemMonitor: ObservableObject {
         monitorTask = Task.detached(priority: .utility) {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                let ticks       = Self.snapshotCPUTicks()
-                let (bi, bo)    = Self.snapshotNetwork()
-                let disk        = DiskInfo.load()
+                let ticks          = Self.snapshotCPUTicks()
+                let (bi, bo)       = Self.snapshotNetwork()
+                let disk           = DiskInfo.load()
+                let (ramU, ramT)   = Self.snapshotRAM()
                 await MainActor.run { [weak self] in
                     guard let self else { return }
-                    self.diskInfo = disk
+                    self.diskInfo      = disk
+                    self.ramUsedBytes  = ramU
+                    self.ramTotalBytes = ramT
                     self.updateCPU(newTicks: ticks)
                     self.updateNetwork(newIn: bi, newOut: bo)
                 }
@@ -78,6 +87,23 @@ final class SystemMonitor: ObservableObject {
         var ticks: [Int32] = []
         for i in 0..<Int(numCPUs) * Int(CPU_STATE_MAX) { ticks.append(info[i]) }
         return ticks
+    }
+
+    // MARK: RAM
+
+    nonisolated private static func snapshotRAM() -> (Int64, Int64) {
+        let total = Int64(ProcessInfo.processInfo.physicalMemory)
+        var stats = vm_statistics64_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
+        let kr = withUnsafeMutablePointer(to: &stats) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return (0, total) }
+        let pageSize = Int64(vm_kernel_page_size)
+        let used = (Int64(stats.active_count) + Int64(stats.wire_count) + Int64(stats.compressor_page_count)) * pageSize
+        return (min(used, total), total)
     }
 
     // MARK: Network

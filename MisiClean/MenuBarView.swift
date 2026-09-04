@@ -15,48 +15,50 @@ struct MenuBarStatusLabel: View {
         monitor.diskInfo.usedFraction > 0.9 ? .red
             : monitor.diskInfo.usedFraction > 0.75 ? .orange : .primary
     }
-
     private var cpuColor: Color {
         monitor.cpuPercent > 90 ? .red : monitor.cpuPercent > 70 ? .orange : .primary
     }
+    private var ramColor: Color {
+        monitor.ramPercent > 90 ? .red : monitor.ramPercent > 75 ? .orange : .primary
+    }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             // CPU
             HStack(spacing: 2) {
                 Image(systemName: "cpu").imageScale(.small)
                 Text("\(monitor.cpuPercent)%")
                     .font(.caption.monospacedDigit().weight(.medium))
-            }
-            .foregroundStyle(cpuColor)
+            }.foregroundStyle(cpuColor)
 
-            // Network
-            if monitor.netUpBps > 0 || monitor.netDownBps > 0 {
-                HStack(spacing: 2) {
-                    Image(systemName: "network").imageScale(.small)
-                    VStack(alignment: .leading, spacing: -1) {
-                        HStack(spacing: 1) {
-                            Image(systemName: "arrow.up").imageScale(.small)
-                            Text(monitor.netUpBps.bpsFormatted)
-                        }
-                        HStack(spacing: 1) {
-                            Image(systemName: "arrow.down").imageScale(.small)
-                            Text(monitor.netDownBps.bpsFormatted)
-                        }
-                    }
-                    .font(.system(size: 8).monospacedDigit())
+            // RAM
+            HStack(spacing: 2) {
+                Image(systemName: "memorychip").imageScale(.small)
+                Text("\(monitor.ramPercent)%")
+                    .font(.caption.monospacedDigit().weight(.medium))
+            }.foregroundStyle(ramColor)
+
+            // Network (toujours visible)
+            VStack(alignment: .leading, spacing: -1) {
+                HStack(spacing: 1) {
+                    Image(systemName: "arrow.up").imageScale(.small)
+                    Text(monitor.netUpBps.bpsFormatted)
                 }
-                .foregroundStyle(.primary)
+                HStack(spacing: 1) {
+                    Image(systemName: "arrow.down").imageScale(.small)
+                    Text(monitor.netDownBps.bpsFormatted)
+                }
             }
+            .font(.system(size: 8).monospacedDigit())
+            .foregroundStyle(.primary)
 
-            // Disk free
+            // Disque libre
             HStack(spacing: 2) {
                 Image(systemName: monitor.diskInfo.usedFraction > 0.9 ? "internaldrive.fill" : "internaldrive")
                     .imageScale(.small)
                 Text(monitor.diskInfo.availableBytes.formattedSize)
                     .font(.caption.monospacedDigit().weight(.medium))
-            }
-            .foregroundStyle(diskColor)
+            }.foregroundStyle(diskColor)
         }
     }
 }
@@ -86,7 +88,7 @@ private enum QuickScanState {
 
     var subtitle: String {
         switch self {
-        case .idle:           return "Vérification rapide des agents suspects"
+        case .idle:           return "Agents, processus, téléchargements…"
         case .scanning:       return "Analyse en cours…"
         case .clean:          return "Aucune menace détectée"
         case .threats(let n): return "\(n) élément\(n > 1 ? "s" : "") suspect\(n > 1 ? "s" : "") trouvé\(n > 1 ? "s" : "")"
@@ -109,6 +111,8 @@ struct MenuBarPanel: View {
     @State private var isHoveringClean = false
     @State private var isHoveringOpen  = false
     @State private var isHoveringQuit  = false
+    @State private var isQuickCleaning = false
+    @State private var quickCleanResult: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -226,7 +230,7 @@ struct MenuBarPanel: View {
                 }
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text("Scan antivirus rapide").font(.caption.weight(.semibold))
+                Text("Antivirus & Malwares").font(.caption.weight(.semibold))
                 Text(scanState.subtitle).font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
@@ -277,11 +281,23 @@ struct MenuBarPanel: View {
 
     private var actions: some View {
         VStack(spacing: 2) {
-            menuButton(label: "Nettoyage rapide", icon: "sparkles", isHovering: isHoveringClean) {
-                openWindow(id: "main")
-                NSApp.activate(ignoringOtherApps: true)
+            if let result = quickCleanResult {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
+                    Text(result).font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 20).padding(.top, 4)
+            }
+            menuButton(
+                label: isQuickCleaning ? "Nettoyage en cours…" : "Nettoyage rapide",
+                icon: isQuickCleaning ? "hourglass" : "sparkles",
+                isHovering: isHoveringClean
+            ) {
+                guard !isQuickCleaning else { return }
+                runQuickClean()
             }
             .onHover { isHoveringClean = $0 }
+            .disabled(isQuickCleaning)
 
             menuButton(label: "Ouvrir MisiClean", icon: "macwindow", isHovering: isHoveringOpen) {
                 openWindow(id: "main")
@@ -310,7 +326,7 @@ struct MenuBarPanel: View {
         .buttonStyle(.plain).padding(.horizontal, 6)
     }
 
-    // MARK: Quick scan
+    // MARK: Quick scan (étendu : agents, processus, téléchargements, chemins connus)
 
     private func runQuickScan() {
         scanState = .scanning
@@ -326,27 +342,108 @@ struct MenuBarPanel: View {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser
         let keywords = ["miner", "cryptominer", "adware", "spyware", "hijack", "payload",
-                        "backdoor", "trojan", "rootkit", "keylogger", "ransom"]
-        let paths = [
+                        "backdoor", "trojan", "rootkit", "keylogger", "ransom",
+                        "malware", "virus", "worm", "exploit", "stealer", "rat", "botnet"]
+
+        var found = 0
+
+        // 1. LaunchAgents / Daemons
+        let agentPaths = [
             home.appendingPathComponent("Library/LaunchAgents").path,
             "/Library/LaunchAgents",
             "/Library/LaunchDaemons",
         ]
-        var found = 0
-        for path in paths {
+        for path in agentPaths {
             guard let items = try? fm.contentsOfDirectory(atPath: path) else { continue }
             for item in items {
                 let lower = item.lowercased()
                 if keywords.contains(where: { lower.contains($0) }) { found += 1; continue }
-                // Also scan plist content for suspicious program paths
                 let full = (path as NSString).appendingPathComponent(item)
                 if let dict = NSDictionary(contentsOfFile: full) as? [String: Any] {
-                    let content = "\(dict)".lowercased()
-                    if keywords.contains(where: { content.contains($0) }) { found += 1 }
+                    if keywords.contains(where: { "\(dict)".lowercased().contains($0) }) { found += 1 }
                 }
             }
         }
+
+        // 2. Processus en cours suspects
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-axo", "comm"]
+        let psPipe = Pipe()
+        ps.standardOutput = psPipe
+        ps.standardError = Pipe()
+        if (try? ps.run()) != nil {
+            ps.waitUntilExit()
+            let output = String(data: psPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            for line in output.split(separator: "\n") {
+                let lower = line.lowercased()
+                if keywords.contains(where: { lower.contains($0) }) { found += 1 }
+            }
+        }
+
+        // 3. Dossier Téléchargements (extensions exécutables suspects)
+        let suspiciousExts = [".dmg.download", ".pkg.download", "backdoor", "crack", "keygen",
+                              "patch", "hack", "trojan", "spy"]
+        let downloads = home.appendingPathComponent("Downloads").path
+        if let items = try? fm.contentsOfDirectory(atPath: downloads) {
+            for item in items {
+                let lower = item.lowercased()
+                if suspiciousExts.contains(where: { lower.contains($0) })
+                   || keywords.contains(where: { lower.contains($0) }) {
+                    found += 1
+                }
+            }
+        }
+
+        // 4. Chemins malware connus
+        let knownBadPaths = [
+            "/Library/Application Support/com.vsearch",
+            "/Library/Application Support/Genieo",
+            "/Library/Application Support/VSearch",
+            home.appendingPathComponent("Library/Application Support/Genieo").path,
+            "/Library/InputManagers",
+            "/System/Library/Extensions/NullCPU.kext",
+        ]
+        for path in knownBadPaths {
+            if fm.fileExists(atPath: path) { found += 1 }
+        }
+
         return found
+    }
+
+    // MARK: Quick clean
+
+    private func runQuickClean() {
+        isQuickCleaning = true
+        quickCleanResult = nil
+        Task.detached(priority: .utility) {
+            let freed = MenuBarPanel.performQuickClean()
+            await MainActor.run {
+                self.isQuickCleaning = false
+                self.quickCleanResult = freed > 1024 ? "\(freed.formattedSize) libérés" : "Déjà propre"
+            }
+        }
+    }
+
+    nonisolated private static func performQuickClean() -> Int64 {
+        let fm = FileManager.default
+        let tmpDirs = [
+            NSTemporaryDirectory(),
+            "/private/tmp/",
+            fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs").path,
+        ]
+        var freed: Int64 = 0
+        for dir in tmpDirs {
+            guard let items = try? fm.contentsOfDirectory(atPath: dir) else { continue }
+            for item in items {
+                let path = (dir as NSString).appendingPathComponent(item)
+                if let attrs = try? fm.attributesOfItem(atPath: path) {
+                    freed += (attrs[.size] as? Int64) ?? 0
+                }
+                try? fm.removeItem(atPath: path)
+            }
+        }
+        return freed
     }
 
     // MARK: RAM
