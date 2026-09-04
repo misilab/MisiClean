@@ -200,7 +200,7 @@ struct ContentView: View {
             Divider()
             rightSidebar
         }
-        .frame(width: 1260, height: 740)
+        .frame(width: 1260, height: 860)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             withAnimation { hasFDA = ContentView.checkFDA() }
             diskInfo = .load()

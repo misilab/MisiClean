@@ -81,6 +81,7 @@ final class TopProcessesViewModel: ObservableObject {
             .compactMap { line -> ProcessItem? in
                 let parts = line.trimmingCharacters(in: .whitespaces)
                     .components(separatedBy: .whitespaces)
+                    .filter { !$0.isEmpty }
                 guard parts.count >= 4,
                       let pid = Int(parts[0]),
                       let cpu = Double(parts[1]),
