@@ -9,10 +9,10 @@ import AppKit
 // MARK: - App Sections
 
 enum AppSection: CaseIterable, Identifiable, Hashable {
-    case clean, largeFiles, oldFiles, duplicates, devTools, scheduledCleaning
-    case uninstaller, iOSBackups, loginItems, browserExt, appUpdater
-    case privacy, memory, maintenance, snapshots, launchAgents, battery, malwareScanner
-    case diskMap, diskExplorer, sysInfo, history
+    case clean, largeFiles, oldFiles, duplicates, devTools, archives, orphanPrefs, scheduledCleaning
+    case uninstaller, iOSBackups, loginItems, browserExt, appUpdater, dormantApps
+    case privacy, memory, maintenance, snapshots, launchAgents, appPermissions, battery, diskHealth, malwareScanner, networkMonitor
+    case diskMap, diskExplorer, metadataCleaner, keychainAudit, sysInfo, history
     var id: Self { self }
 
     var label: LocalizedStringKey {
@@ -37,8 +37,16 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
         case .history:          return "Historique"
         case .appUpdater:       return "Mises à jour"
         case .scheduledCleaning:return "Planification"
+        case .archives:         return "Archives"
+        case .orphanPrefs:      return "Préf. orphelines"
+        case .dormantApps:      return "Apps dormantes"
+        case .appPermissions:   return "Permissions"
         case .battery:          return "Batterie"
+        case .diskHealth:       return "Santé disque"
         case .malwareScanner:   return "Antivirus"
+        case .networkMonitor:   return "Réseau"
+        case .metadataCleaner:  return "Métadonnées"
+        case .keychainAudit:    return "Trousseau"
         }
     }
 
@@ -64,8 +72,16 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
         case .history:          return "clock.arrow.circlepath"
         case .appUpdater:       return "arrow.down.app.fill"
         case .scheduledCleaning:return "timer"
+        case .archives:         return "archivebox.fill"
+        case .orphanPrefs:      return "doc.badge.gearshape.fill"
+        case .dormantApps:      return "clock.badge.questionmark"
+        case .appPermissions:   return "lock.shield.fill"
         case .battery:          return "battery.100.bolt"
+        case .diskHealth:       return "externaldrive.badge.checkmark"
         case .malwareScanner:   return "shield.lefthalf.filled.trianglebadge.exclamationmark"
+        case .networkMonitor:   return "network"
+        case .metadataCleaner:  return "location.slash.fill"
+        case .keychainAudit:    return "key.fill"
         }
     }
 
@@ -91,17 +107,28 @@ enum AppSection: CaseIterable, Identifiable, Hashable {
         case .history:          return .teal
         case .appUpdater:       return Color(red: 0.0,  green: 0.55, blue: 0.88)
         case .scheduledCleaning:return Color(red: 0.5,  green: 0.28, blue: 0.92)
+        case .archives:         return Color(red: 0.60, green: 0.45, blue: 0.20)
+        case .orphanPrefs:      return Color(red: 0.55, green: 0.28, blue: 0.92)
+        case .dormantApps:      return Color(red: 0.50, green: 0.28, blue: 0.92)
+        case .appPermissions:   return .indigo
         case .battery:          return Color(red: 0.15, green: 0.75, blue: 0.35)
+        case .diskHealth:       return Color(red: 0.10, green: 0.68, blue: 0.45)
         case .malwareScanner:   return Color(red: 0.88, green: 0.15, blue: 0.15)
+        case .networkMonitor:   return Color(red: 0.00, green: 0.55, blue: 0.90)
+        case .metadataCleaner:  return Color(red: 0.88, green: 0.30, blue: 0.50)
+        case .keychainAudit:    return Color(red: 0.35, green: 0.55, blue: 0.95)
         }
     }
 }
 
-private let sidebarGroups: [(String, [AppSection])] = [
-    ("Nettoyage",    [.clean, .largeFiles, .oldFiles, .duplicates, .devTools, .scheduledCleaning]),
-    ("Applications", [.uninstaller, .iOSBackups, .loginItems, .browserExt, .appUpdater]),
-    ("Système",      [.privacy, .memory, .maintenance, .snapshots, .launchAgents, .battery, .malwareScanner]),
-    ("Outils",       [.diskMap, .diskExplorer, .sysInfo, .history]),
+private let leftSidebarGroups: [(String, [AppSection])] = [
+    ("Nettoyage",    [.clean, .largeFiles, .oldFiles, .duplicates, .archives, .orphanPrefs, .devTools, .scheduledCleaning]),
+    ("Applications", [.uninstaller, .iOSBackups, .loginItems, .browserExt, .appUpdater, .dormantApps]),
+]
+
+private let rightSidebarGroups: [(String, [AppSection])] = [
+    ("Système",      [.privacy, .memory, .maintenance, .snapshots, .launchAgents, .appPermissions, .battery, .diskHealth, .malwareScanner, .networkMonitor]),
+    ("Outils",       [.diskMap, .diskExplorer, .metadataCleaner, .keychainAudit, .sysInfo, .history]),
 ]
 
 // MARK: - Root
@@ -129,6 +156,15 @@ struct ContentView: View {
     @StateObject private var scheduledVM     = ScheduledCleaningViewModel()
     @StateObject private var batteryVM       = BatteryViewModel()
     @StateObject private var malwareScannerVM = MalwareScannerViewModel()
+    @StateObject private var permissionsVM    = PermissionsAuditViewModel()
+    @StateObject private var diskHealthVM     = DiskHealthViewModel()
+    @StateObject private var dormantAppsVM    = DormantAppsViewModel()
+    @StateObject private var archivesVM       = ArchivesViewModel()
+    @StateObject private var orphanPrefsVM    = OrphanPrefsViewModel()
+    @StateObject private var networkMonitorVM = NetworkMonitorViewModel()
+    @StateObject private var metadataVM       = MetadataCleanerViewModel()
+    @StateObject private var keychainVM       = KeychainAuditViewModel()
+    @ObservedObject private var updateManager = SelfUpdateManager.shared
     @State private var hasFDA: Bool = ContentView.checkFDA()
     @State private var diskInfo: DiskInfo = .load()
 
@@ -137,8 +173,10 @@ struct ContentView: View {
             sidebar
             Divider()
             mainContent
+            Divider()
+            rightSidebar
         }
-        .frame(width: 1060, height: 880)
+        .frame(width: 1260, height: 740)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             withAnimation { hasFDA = ContentView.checkFDA() }
             diskInfo = .load()
@@ -187,7 +225,48 @@ struct ContentView: View {
     private var sidebarNav: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(sidebarGroups, id: \.0) { (group, sections) in
+                ForEach(leftSidebarGroups, id: \.0) { (group, sections) in
+                    Text(LocalizedStringKey(group))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .textCase(.uppercase)
+                        .padding(.horizontal, 14)
+                        .padding(.top, 14)
+                        .padding(.bottom, 4)
+                    ForEach(sections) { s in
+                        SidebarItem(section: s, isSelected: section == s) {
+                            withAnimation(.easeInOut(duration: 0.18)) { section = s }
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 8)
+        }
+    }
+
+    // MARK: Right Sidebar
+
+    private var rightSidebar: some View {
+        VStack(spacing: 0) {
+            rightSidebarNav
+            Spacer(minLength: 0)
+        }
+        .frame(width: 184)
+        .background {
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                LinearGradient(
+                    colors: [Color(red: 0.55, green: 0.15, blue: 0.90).opacity(0.05), .clear],
+                    startPoint: .top, endPoint: .center
+                )
+            }
+        }
+    }
+
+    private var rightSidebarNav: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(rightSidebarGroups, id: \.0) { (group, sections) in
                     Text(LocalizedStringKey(group))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.tertiary)
@@ -244,6 +323,13 @@ struct ContentView: View {
             if !hasFDA {
                 FDABanner { withAnimation { hasFDA = ContentView.checkFDA() } }
             }
+            if let update = updateManager.availableUpdate {
+                UpdateBanner(
+                    update: update,
+                    onDownload: { updateManager.openDownloadPage() },
+                    onDismiss: { updateManager.dismissUpdate() }
+                )
+            }
             ZStack {
                 switch section {
                 case .clean:
@@ -288,8 +374,24 @@ struct ContentView: View {
                     ScheduledCleaningSection(vm: scheduledVM).transition(.opacity)
                 case .battery:
                     BatterySection(vm: batteryVM).transition(.opacity)
+                case .archives:
+                    ArchivesSection(vm: archivesVM).transition(.opacity)
+                case .dormantApps:
+                    DormantAppsSection(vm: dormantAppsVM).transition(.opacity)
+                case .appPermissions:
+                    PermissionsAuditSection(vm: permissionsVM).transition(.opacity)
+                case .diskHealth:
+                    DiskHealthSection(vm: diskHealthVM).transition(.opacity)
                 case .malwareScanner:
                     MalwareScannerSection(vm: malwareScannerVM).transition(.opacity)
+                case .orphanPrefs:
+                    OrphanPrefsSection(vm: orphanPrefsVM).transition(.opacity)
+                case .networkMonitor:
+                    NetworkMonitorSection(vm: networkMonitorVM).transition(.opacity)
+                case .metadataCleaner:
+                    MetadataCleanerSection(vm: metadataVM).transition(.opacity)
+                case .keychainAudit:
+                    KeychainAuditSection(vm: keychainVM).transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.18), value: section)
@@ -298,7 +400,12 @@ struct ContentView: View {
     }
 
     nonisolated static func checkFDA() -> Bool {
-        FileManager.default.isReadableFile(atPath: "/Library/Application Support/com.apple.TCC/TCC.db")
+        let fm = FileManager.default
+        // Try to enumerate an FDA-protected directory — metadata checks aren't reliable on macOS 15
+        let safariLib = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Safari").path
+        if (try? fm.contentsOfDirectory(atPath: safariLib)) != nil { return true }
+        return (try? fm.contentsOfDirectory(atPath: "/Library/Application Support/com.apple.TCC")) != nil
     }
 }
 
@@ -400,6 +507,53 @@ struct FDABanner: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Color.orange.opacity(0.08))
+        .overlay(alignment: .bottom) { Divider() }
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+}
+
+// MARK: - Update Banner
+
+struct UpdateBanner: View {
+    let update: UpdateInfo
+    let onDownload: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.up.circle.fill")
+                .font(.title3)
+                .foregroundStyle(.green)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("MisiClean \(update.version) disponible")
+                    .font(.callout.weight(.semibold))
+                if let date = update.publishedAt {
+                    Text("Publié le \(date.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Une nouvelle version est prête à être téléchargée")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Button("Télécharger", action: onDownload)
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .controlSize(.small)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark").font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Ignorer cette mise à jour")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.green.opacity(0.08))
         .overlay(alignment: .bottom) { Divider() }
         .transition(.move(edge: .top).combined(with: .opacity))
     }
@@ -545,6 +699,27 @@ struct WelcomeView: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut("r", modifiers: .command)
+                .opacity(appeared ? 1 : 0).offset(y: appeared ? 0 : 8)
+
+                // Quick Clean
+                Button { Task { await vm.quickClean() } } label: {
+                    HStack(spacing: 7) {
+                        if vm.isQuickCleaning {
+                            ProgressView().scaleEffect(0.75)
+                            Text("Nettoyage rapide…")
+                        } else {
+                            Image(systemName: "bolt.fill")
+                            Text("Nettoyage rapide")
+                        }
+                    }
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 240)
+                    .padding(.vertical, 10)
+                    .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .disabled(vm.isScanning || vm.isQuickCleaning || vm.isCleaning)
                 .opacity(appeared ? 1 : 0).offset(y: appeared ? 0 : 8)
             }
             Spacer()

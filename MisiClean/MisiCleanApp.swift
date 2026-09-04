@@ -11,16 +11,40 @@ import UserNotifications
 @main
 struct MisiCleanApp: App {
     @State private var diskInfo = DiskInfo.load()
+    // Tracks whether we have already handled the startup window policy this process run
+    private static var didHandleStartup = false
 
     init() {
         startDiskMonitoring()
+        startUpdateCheck()
     }
 
     var body: some Scene {
         Window("MisiClean", id: "main") {
             ContentView()
+                .onAppear {
+                    guard !MisiCleanApp.didHandleStartup else { return }
+                    MisiCleanApp.didHandleStartup = true
+                    if PreferencesManager.shared.startInBackground {
+                        DispatchQueue.main.async {
+                            NSApp.windows.first { $0.title == "MisiClean" }?.close()
+                        }
+                    }
+                }
         }
         .windowResizability(.contentSize)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Vérifier les mises à jour…") {
+                    Task { await SelfUpdateManager.shared.checkForUpdates() }
+                }
+                Divider()
+            }
+        }
+
+        Settings {
+            PreferencesView()
+        }
 
         MenuBarExtra {
             MenuBarPanel()
@@ -28,6 +52,14 @@ struct MisiCleanApp: App {
             MenuBarStatusLabel(diskInfo: diskInfo)
         }
         .menuBarExtraStyle(.window)
+    }
+
+    private func startUpdateCheck() {
+        Task { @MainActor in
+            guard PreferencesManager.shared.autoCheckUpdates,
+                  SelfUpdateManager.shared.shouldAutoCheck else { return }
+            await SelfUpdateManager.shared.checkForUpdates()
+        }
     }
 
     // Vérifie l'espace disque toutes les 5 minutes et notifie si critique (>90%)
@@ -45,7 +77,8 @@ struct MisiCleanApp: App {
     @MainActor
     static func checkDiskAndNotify() {
         let info = DiskInfo.load()
-        guard info.usedFraction > 0.90 else { return }
+        let threshold = PreferencesManager.shared.diskAlertThreshold
+        guard info.usedFraction > threshold else { return }
 
         // Throttle: pas plus d'une notification toutes les 4 heures
         let lastKey = "fr.misilab.MisiClean.lastDiskNotification"

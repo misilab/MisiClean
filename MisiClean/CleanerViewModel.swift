@@ -18,6 +18,7 @@ class CleanerViewModel: ObservableObject {
     @Published var lastCleanedBytes: Int64 = 0
     @Published var hasErrors = false
     @Published var lastScanDate: Date? = nil
+    @Published var isQuickCleaning = false
 
     var totalSelectedBytes: Int64 {
         categories.filter(\.isSelected).reduce(0) { $0 + $1.sizeBytes }
@@ -232,6 +233,52 @@ class CleanerViewModel: ObservableObject {
             for item in contents { do { try fm.removeItem(at: item) } catch { lastError = error.localizedDescription } }
             return lastError
         }.value
+    }
+
+    // MARK: - Quick Clean
+
+    func quickClean() async {
+        guard !isCleaning && !isScanning && !isQuickCleaning else { return }
+        isQuickCleaning = true
+        defer { isQuickCleaning = false; diskInfo = .load() }
+
+        let safeNames = PreferencesManager.shared.quickCleanCategoryNames
+        let targets = categories.enumerated().filter { safeNames.contains($0.element.name) }
+
+        // Measure sizes in parallel
+        var sizeMap: [Int: Int64] = [:]
+        await withTaskGroup(of: (Int, Int64).self) { group in
+            for (idx, cat) in targets {
+                group.addTask {
+                    var s: Int64 = 0
+                    for p in cat.paths { s += CleanerViewModel.measureFolder(p).0 }
+                    return (idx, s)
+                }
+            }
+            for await (idx, size) in group { sizeMap[idx] = size }
+        }
+
+        // Clean non-empty categories
+        var freed: Int64 = 0
+        var cleanedNames: [String] = []
+        for (idx, cat) in targets {
+            let size = sizeMap[idx] ?? 0
+            guard size > 0 else { continue }
+            var ok = true
+            for path in cat.paths { if await deleteContents(of: path) != nil { ok = false } }
+            if ok { freed += size }
+            cleanedNames.append(cat.name)
+            withAnimation {
+                categories[idx].sizeBytes = 0
+                categories[idx].fileCount = 0
+                categories[idx].isSelected = false
+            }
+        }
+
+        lastCleanedBytes = freed
+        hasErrors = false
+        if freed > 0 { HistoryManager.shared.record(freedBytes: freed, categoryNames: cleanedNames) }
+        showResult = true
     }
 
     func setSelectAll(_ value: Bool) {

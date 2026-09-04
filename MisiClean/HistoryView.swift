@@ -5,6 +5,7 @@
 
 import SwiftUI
 import Combine
+import UniformTypeIdentifiers
 
 struct HistorySection: View {
     @ObservedObject private var hm = HistoryManager.shared
@@ -36,6 +37,11 @@ struct HistorySection: View {
             }
             Spacer()
             if !hm.events.isEmpty {
+                Button { exportHistory() } label: {
+                    Label("Exporter", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.bordered)
+
                 Button(role: .destructive) { showClearConfirm = true } label: {
                     Label("Effacer tout", systemImage: "trash")
                 }
@@ -43,6 +49,44 @@ struct HistorySection: View {
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    private func exportHistory() {
+        let cal = Calendar.current
+        var lines: [String] = [
+            "MisiClean — Rapport d'historique",
+            "Généré le \(Date().formatted(date: .long, time: .shortened))",
+            "",
+            "Total : \(hm.totalFreedBytes.formattedSize) libérés en \(hm.cleanCount) nettoyage\(hm.cleanCount > 1 ? "s" : "")",
+            String(repeating: "─", count: 52),
+        ]
+        let grouped = Dictionary(grouping: hm.events) { e -> String in
+            if cal.isDateInToday(e.date) { return "Aujourd'hui" }
+            if cal.isDateInYesterday(e.date) { return "Hier" }
+            return e.date.formatted(date: .abbreviated, time: .omitted)
+        }
+        let sortedKeys = grouped.keys.sorted { a, b in
+            grouped[a]!.first!.date > grouped[b]!.first!.date
+        }
+        for key in sortedKeys {
+            lines.append(""); lines.append("  \(key)")
+            for e in (grouped[key] ?? []).sorted(by: { $0.date > $1.date }) {
+                let time = e.date.formatted(date: .omitted, time: .shortened)
+                lines.append("  • \(e.freedBytes.formattedSize) libérés à \(time)")
+                if !e.categoryNames.isEmpty {
+                    lines.append("    \(e.categoryNames.joined(separator: " · "))")
+                }
+            }
+        }
+        let content = lines.joined(separator: "\n")
+
+        let panel = NSSavePanel()
+        panel.title = "Exporter l'historique"
+        panel.nameFieldStringValue = "MisiClean-historique.txt"
+        panel.allowedContentTypes = [.plainText]
+        if panel.runModal() == .OK, let url = panel.url {
+            try? content.write(to: url, atomically: true, encoding: .utf8)
+        }
     }
 
     private var emptyState: some View {
