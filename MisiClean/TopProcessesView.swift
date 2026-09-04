@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import Combine
 import Darwin
 
 struct ProcessItem: Identifiable {
@@ -136,11 +137,11 @@ struct TopProcessesSection: View {
             }
             Spacer()
             Picker("Trier par", selection: $vm.sort) {
-                Label("CPU", systemImage: "cpu").tag(ProcessSortOrder.cpu)
-                Label("RAM", systemImage: "memorychip").tag(ProcessSortOrder.ram)
+                Text("CPU").tag(ProcessSortOrder.cpu)
+                Text("RAM").tag(ProcessSortOrder.ram)
             }
             .pickerStyle(.segmented)
-            .frame(width: 160)
+            .frame(width: 100)
 
             Button { vm.refresh() } label: {
                 Label(vm.isRefreshing ? "…" : "Actualiser", systemImage: "arrow.clockwise")
@@ -175,7 +176,7 @@ struct TopProcessesSection: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(vm.sorted) { item in
-                    ProcessRow(item: item, onKill: { vm.confirmKill = item })
+                    TopProcessRow(item: item, onKill: { vm.confirmKill = item })
                     Divider().padding(.leading, 16)
                 }
             }
@@ -183,7 +184,7 @@ struct TopProcessesSection: View {
     }
 }
 
-private struct ProcessRow: View {
+private struct TopProcessRow: View {
     let item: ProcessItem
     let onKill: () -> Void
     @State private var isHovering = false
