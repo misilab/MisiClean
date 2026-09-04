@@ -326,7 +326,7 @@ struct ContentView: View {
             if let update = updateManager.availableUpdate {
                 UpdateBanner(
                     update: update,
-                    onDownload: { updateManager.openDownloadPage() },
+                    manager: updateManager,
                     onDismiss: { updateManager.dismissUpdate() }
                 )
             }
@@ -516,40 +516,82 @@ struct FDABanner: View {
 
 struct UpdateBanner: View {
     let update: UpdateInfo
-    let onDownload: () -> Void
+    @ObservedObject var manager: SelfUpdateManager
     let onDismiss: () -> Void
+
+    private var isActive: Bool {
+        if case .idle = manager.installState { return false }
+        if case .cancelled = manager.installState { return false }
+        if case .failed = manager.installState { return false }
+        return true
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "arrow.up.circle.fill")
+            Image(systemName: isActive ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
                 .font(.title3)
                 .foregroundStyle(.green)
+                .symbolEffect(.pulse, isActive: isActive)
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text("MisiClean \(update.version) disponible")
                     .font(.callout.weight(.semibold))
-                if let date = update.publishedAt {
-                    Text("Publié le \(date.formatted(date: .abbreviated, time: .omitted))")
+
+                switch manager.installState {
+                case .downloading(let p):
+                    ProgressView(value: p)
+                        .frame(maxWidth: 220)
+                        .tint(.green)
+                    Text("Téléchargement \(Int(p * 100)) %…")
                         .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text("Une nouvelle version est prête à être téléchargée")
+
+                case .installing:
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(height: 12)
+                    Text("Installation en cours…")
                         .font(.caption).foregroundStyle(.secondary)
+
+                case .done:
+                    Text("Installé — redémarrage…")
+                        .font(.caption).foregroundStyle(.green)
+
+                case .failed(let msg):
+                    Text(msg)
+                        .font(.caption).foregroundStyle(.red)
+
+                case .cancelled:
+                    Text("Installation annulée")
+                        .font(.caption).foregroundStyle(.secondary)
+
+                case .idle:
+                    if let date = update.publishedAt {
+                        Text("Publié le \(date.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("Prête à être installée automatiquement")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
 
             Spacer()
 
-            Button("Télécharger", action: onDownload)
+            if !isActive {
+                Button("Installer") {
+                    Task { await manager.downloadAndInstall() }
+                }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
                 .controlSize(.small)
 
-            Button(action: onDismiss) {
-                Image(systemName: "xmark").font(.caption.weight(.semibold))
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark").font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Ignorer cette mise à jour")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("Ignorer cette mise à jour")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

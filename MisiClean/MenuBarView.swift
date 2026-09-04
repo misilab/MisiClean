@@ -267,7 +267,7 @@ struct MenuBarPanel: View {
                 Text("Nouvelle version prête").font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Installer") { updateManager.openDownloadPage() }
+            Button("Installer") { Task { await updateManager.downloadAndInstall() } }
                 .buttonStyle(.borderedProminent).tint(.orange).controlSize(.mini)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)

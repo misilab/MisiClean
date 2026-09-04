@@ -192,9 +192,9 @@ private struct UpdatesPrefsTab: View {
                             .font(.callout.monospacedDigit().weight(.semibold))
                     }
                     Button {
-                        updater.openDownloadPage()
+                        Task { await updater.downloadAndInstall() }
                     } label: {
-                        Label("Télécharger MisiClean \(update.version)", systemImage: "arrow.down.circle.fill")
+                        Label("Installer MisiClean \(update.version)", systemImage: "arrow.down.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(accent)
