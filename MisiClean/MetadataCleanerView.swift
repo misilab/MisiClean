@@ -64,7 +64,9 @@ final class MetadataCleanerViewModel: ObservableObject {
             home.appendingPathComponent("Pictures"),
             home.appendingPathComponent("Documents"),
         ]
-        let exts: Set<String> = ["jpg", "jpeg", "heic", "heif", "tiff", "tif"]
+        // Uniquement les formats qu'ImageIO peut réécrire sans perte de données
+        // Les formats RAW propriétaires (CR2, NEF, ARW…) sont lisibles mais pas ré-écrits par CGImageDestination
+        let exts: Set<String> = ["jpg", "jpeg", "heic", "heif", "tiff", "tif", "png"]
 
         let found: [ImageWithGPS] = await Task.detached(priority: .userInitiated) {
             var urls: [URL] = []
@@ -78,10 +80,10 @@ final class MetadataCleanerViewModel: ObservableObject {
                 ) else { continue }
 
                 for case let fileURL as URL in enumerator {
-                    // Limit depth to ~3 levels
+                    // Limit depth to ~5 levels
                     let rootComponents = root.pathComponents.count
                     let fileComponents = fileURL.pathComponents.count
-                    if fileComponents - rootComponents > 3 {
+                    if fileComponents - rootComponents > 5 {
                         enumerator.skipDescendants()
                         continue
                     }
